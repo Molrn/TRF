@@ -1,25 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any
-
-from .data import (
-    AcceleratedRound,
-    DeprecatedTeam,
-    Game,
-    NationalPlayer,
-    Player,
-    ProhibitedPairing,
-    Team,
-    Tournament,
-    RoundBye,
-    TeamPABs,
-    TeamForfeitedMatch,
-    OOdOTeamPairing,
-    AbnormalPointsAssignment,
-)
-from .exception import TrfException
+from .Player import Player, Game
+from .Tournament import Team
+from .TrfException import TrfException
 import re
-
-from .utils import float_display, int_or_default, float_or_default, split_ints, split_optional_ints
 
 
 class TrfEntry(ABC):
@@ -27,16 +10,12 @@ class TrfEntry(ABC):
         self.din = din
 
     @abstractmethod
-    def dump(self, fp, tournament: Tournament):
+    def dump(self, fp, tournament):
         pass
 
     @abstractmethod
-    def load(self, tournament: Tournament, data: str):
+    def load(self, tournament, data):
         pass
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        """Header displayed before dumping all the lines of the table."""
-        return None
 
 
 class SingleLineEntry(TrfEntry):
@@ -44,644 +23,141 @@ class SingleLineEntry(TrfEntry):
         super().__init__(din)
         self.fieldname = fieldname
 
-    def dump(self, fp, tournament: Tournament):
+    def dump(self, fp, tournament):
         value = tournament.__dict__[self.fieldname]
-        if not value:
-            return
-        header = self.get_header(tournament)
-        if header:
-            fp.write(f'\n### {header}\n')
         fp.write(f'{self.din} {self.format(value)}\n')
 
-    def format(self, value: Any) -> str:
+    def format(self, value):
         return str(value)
 
-    def load(self, tournament: Tournament, data: str):
-        value = self.parse(data)
+    def load(self, tournament, data):
+        value = self.parse(data.strip())
         tournament.__dict__[self.fieldname] = value
 
-    def parse(self, data: str) -> Any:
-        return data.strip()
-
-
-class MultipleLinesEntry(TrfEntry):
-    def __init__(self, din, fieldname):
-        super().__init__(din)
-        self.fieldname = fieldname
-
-    def dump(self, fp, tournament: Tournament):
-        value = tournament.__dict__[self.fieldname]
-        if not value:
-            return
-        header = self.get_header(tournament)
-        if header:
-            fp.write(f'\n### {header}\n')
-        for item in value:
-            fp.write(f'{self.din} {self.format(item)}\n')
-
-    def format(self, value: Any) -> str:
-        return str(value)
-
-    def load(self, tournament: Tournament, data: str):
-        value = self.parse(data)
-        tournament.__dict__[self.fieldname].append(value)
-
-    def parse(self, data: str) -> Any:
-        return data.strip()
+    def parse(self, data):
+        return data
 
 
 class SingleLineIntEntry(SingleLineEntry):
-    def parse(self, data: str) -> Any:
-        return int(data.strip())
+    def __init__(self, din, fieldname):
+        super().__init__(din, fieldname)
+
+    def parse(self, data):
+        return int(data)
 
 
 class SingleLineListEntry(SingleLineEntry):
-    def __init__(self, din, fieldname, separator=','):
+    def __init__(self, din, fieldname, delim):
         super().__init__(din, fieldname)
-        self.separator = separator
+        self.delim = delim
 
-    def format(self, value: Any) -> str:
-        return self.separator.join(value)
+    def dump(self, fp, tournament):
+        value = tournament.__dict__[self.fieldname]
+        data = self.delim.join(self.format(v) for v in value)
+        fp.write(f'{self.din} {data}\n')
 
-    def parse(self, data: str) -> Any:
-        return [s.strip() for s in data.strip().split(self.separator) if s.strip()]
+    def load(self, tournament, data):
+        value = [self.parse(s) for s in data.strip().split(self.delim) if s]
+        tournament.__dict__[self.fieldname] = value
 
 
-class RoundDatesEntry(SingleLineEntry):
+PLAYER_LINE_PATTERN = re.compile(r'^(?P<startrank>[ \d]{4}) (?P<sex>[\w ])(?P<title>[\w ]{3}) (?P<name>.{33}) (?P<rating>[ \d]{4}) (?P<fed>[\w ]{3}) (?P<id>[ \d]{11}) (?P<birthdate>.{10}) (?P<points>[ \d.]{4}) (?P<rank>[ \d]{4})(?P<games>(  [ \d]{4} [bsw\- ] [1=0+wdl\-hfuz ]| {10})*)\s*$', re.IGNORECASE)
+
+
+class PlayerEntry(TrfEntry):
     def __init__(self):
-        super().__init__('132', 'round_dates')
+        super().__init__('001')
 
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = ' ' * 86
-        num_columns = len(tournament.round_dates)
-        for column in range(1, num_columns + 1):
-            header += f'  {str(column).rjust(8, "R")}'
-        return header
+    def dump(self, fp, tournament):
+        for player in tournament.players:
+            self.dump_player(fp, player)
+            fp.write('\n')
 
-    def format(self, value: Any) -> str:
-        return ' ' * 88 + '  '.join(value)
+    def dump_player(self, fp, player):
+        fp.write('001')
+        fp.write(f' {player.startrank:>4}')
+        fp.write(f' {player.sex:1}')
+        fp.write(f'{player.title:>3}')
+        fp.write(f' {player.name:<33}')
+        fp.write(f' {player.rating or "":>4}')
+        fp.write(f' {player.fed:<3}')
+        fp.write(f' {player.id or "":>11}')
+        fp.write(f' {player.birthdate:>10}')
+        fp.write(f' {player.points:>4}')
+        fp.write(f' {"" if player.rank is None else player.rank:>4}')
 
-    def parse(self, data: str) -> Any:
-        return [s for s in data.strip().split(' ') if s]
-
-
-class PointSystemEntry(SingleLineEntry):
-    def format(self, value: Any) -> str:
-        return '   '.join(
-            f'{symbol:>2}{float_display(score, 4)}'
-            for symbol, score in value.items()
-        )
-
-    def parse(self, data: str) -> Any:
-        point_system: dict[str, float] = {}
-        while len(data) >= 3:
-            entry = data[:9]
-            point_system[entry[:2].strip()] = float(entry[2:].strip())
-            data = data[9:]
-        return point_system
-
-
-class PlayerEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<id>[ \d]{4}) (?P<sex>[\w ])(?P<title>[\w ]{3}) '
-        r'(?P<name>.{33}) (?P<rating>[ \d]{4}) (?P<federation>[\w ]{3}) '
-        r'(?P<fide_id>[ \d]{11}) (?P<birth_date>.{10}) (?P<points>[ \d.]{4}) '
-        r'(?P<rank>[ \d]{4})(?P<games>(\s\s[ \d]{4} [bsw\- ] [1=0+wdl\-hfuz ]| {10})*)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('001', 'players')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'SSSS sTTT NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN RRRR FFF IIIIIIIIIII BBBB/BB/BB PPPP RRRR'
-        num_columns = max(len(player.games) for player in tournament.players)
-        for column in range(1, num_columns + 1):
-            col = str(column%10)
-            header += f'  {col * 4} {col} {col}'
-        return header
-
-    def format(self, value: Any) -> str:
-        player: Player = value
-        line = (
-            f'{player.id:>4}'
-            f' {player.sex:1}'
-            f'{player.title:>3}'
-            f' {player.name[:33]:<33}'
-            f' {player.rating or "":>4}'
-            f' {player.federation:<3}'
-            f' {player.fide_id or "":>11}'
-            f' {player.birth_date:>10}'
-            f' {float_display(player.points, 4)}'
-            f' {"" if player.rank is None else player.rank:>4}'
-        )
         for game in player.games:
-            sr = '0000' if game.opponent_id == 0 else game.opponent_id or ''
-            line += f'  {sr:>4} {game.color:1} {game.result:1}'
-        return line
+            sr = '0000' if game.startrank == 0 else game.startrank or ''
+            fp.write(f'  {sr:>4} {game.color:1} {game.result:1}')
 
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
+    def load(self, tournament, data):
+        match = PLAYER_LINE_PATTERN.fullmatch(data)
         if match is None:
             raise TrfException(f'Player data not matching pattern: {data}')
 
-        return Player(
-            id=int(match.group('id')),
+        player = Player(
+            startrank=int(match.group('startrank')),
             sex=match.group('sex'),
             title=match.group('title').strip(),
             name=match.group('name').strip(),
             rating=int_or_default(match.group('rating'), 0),
-            federation=match.group('federation').strip(),
-            fide_id=int_or_default(match.group('fide_id')),
-            birth_date=match.group('birth_date').strip(),
+            fed=match.group('fed').strip(),
+            id=int_or_default(match.group('id')),
+            birthdate=match.group('birthdate').strip(),
             points=float(match.group('points')),
             rank=int_or_default(match.group('rank')),
-            games=self.parse_games(match.group('games')[2:].rstrip())
+            games=list(self.parse_games(match.group('games')[2:].rstrip()))
         )
+        tournament.players.append(player)
 
-    def parse_games(self, string) -> list[Game]:
-        round_ = 1
-        games: list[Game] = []
+    def parse_games(self, string):
+        round = 1
         while len(string) >= 8:
-            games.append(
-                Game(
-                    opponent_id=int_or_default(string[:4].strip()),
-                    color=string[5],
-                    result=string[7],
-                    round=round_,
-                )
+            yield Game(
+                startrank=int_or_default(string[:4].strip()),
+                color=string[5],
+                result=string[7],
+                round=round
             )
-            round_ += 1
+            round += 1
             string = string[10:]
-        return games
 
 
-class NationalPlayerEntry(TrfEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<player_id>[ \d]{4}) (?P<sex>[\w ]) (?P<classification>[\w ]{3}) '
-        r'(?P<name>.{33}) (?P<rating>[ \d]{4}) (?P<origin>[\w ]{3}) '
-        r'(?P<national_id>.{11}) (?P<birth_date>.{10})\s*$',
-        re.IGNORECASE,
-    )
-
-    def dump(self, fp, tournament: Tournament):
-        players = tournament.national_players_by_federation.get(self.din, [])
-        if not players:
-            return
-        fp.write('\n### SSSS sCCC NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN RRRR OOO IIIIIIIIIII BBBB/BB/BB\n')
-        for player in players:
-            fp.write(f'{self.din} {self.format(player)}\n')
-
-    def format(self, player: NationalPlayer) -> str:
-        return (
-            f'{player.player_id:>4}'
-            f' {player.sex:1}'
-            f'{player.classification:>3}'
-            f' {player.name[:33]:<33}'
-            f' {player.rating or "":>4}'
-            f' {player.origin:<3}'
-            f' {player.national_id:>11}'
-            f' {player.birth_date:>10}'
-        )
-
-    def load(self, tournament: Tournament, data: str):
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(f'National player data not matching pattern: {data}')
-
-        player_id = int(match.group('player_id'))
-        player = next(
-            (player for player in tournament.players if player.id == player_id),
-            None,
-        )
-        if not player:
-            raise TrfException(f'National player entry for unknown player [{player_id}].')
-        player.national_player_by_federation[self.din] = NationalPlayer(
-            player_id=player_id,
-            sex=match.group('sex'),
-            classification=match.group('classification').strip(),
-            name=match.group('name').strip(),
-            rating=int_or_default(match.group('rating'), 0),
-            origin=match.group('origin').strip(),
-            national_id=int_or_default(match.group('national_id')),
-            birth_date=match.group('birth_date').strip(),
-        )
+def int_or_default(string, default=None):
+    if string == '' or string.isspace():
+        return default
+    return int(string)
 
 
-class DeprecatedTeamEntry(MultipleLinesEntry):
+class TeamEntry(TrfEntry):
     def __init__(self):
-        super().__init__('013', 'deprecated_teams')
+        super().__init__('013')
 
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'
-        num_columns = max(
-            len(team.player_ids) for team in tournament.deprecated_teams
-        )
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "P")}'
-        return header
+    def dump(self, fp, tournament):
+        for team in tournament.teams:
+            startranks = ' '.join(f'{s:>4}' for s in team.startranks)
+            fp.write(f'013 {team.name:32} {startranks}\n')
 
-    def format(self, value: Any) -> str:
-        team: DeprecatedTeam = value
-        player_ids = ' '.join(f'{s:>4}' for s in team.player_ids)
-        return f'{team.name[:32]:32} {player_ids}'
-
-    def parse(self, data: str) -> Any:
-        return DeprecatedTeam(
-            name=data[:32], player_ids=split_ints(data[32:], 5)
-        )
-
-
-class TeamEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<id>[ \d]{3}) (?P<name>.{32}) (?P<nickname>[ \w]{5}) '
-        r'(?P<strength_factor>[ \d]{6}) (?P<match_points>[ \d.]{6}) '
-        r'(?P<game_points>[ \d.]{6}) (?P<rank>[ \d]{3}) (?P<player_ids>( [ \d]{4})*)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('310', 'teams')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'SSS NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN FFFFF EEEEEE MMMMMM GGGGGG RRR '
-        num_columns = max(len(team.player_ids) for team in tournament.teams)
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "P")}'
-        return header
-
-
-    def format(self, value: Any) -> str:
-        team: Team = value
-        line = (
-            f'{team.id:>3}'
-            f' {team.name[:32]:<32}'
-            f' {team.nickname[:5]:<5}'
-            f' {team.strength_factor:>6}'
-            f' {float_display(team.match_points, 6)}'
-            f' {float_display(team.game_points, 6)}'
-            f' {team.rank:>3} '
-        )
-        for player_id in team.player_ids:
-            line += f' {player_id:>4}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(f'Team data not matching pattern: {data}')
-        return Team(
-            id=int(match.group('id')),
-            name=match.group('name').strip(),
-            nickname=match.group('nickname').strip(),
-            strength_factor=int_or_default(match.group('strength_factor'), 0),
-            match_points=float(match.group('match_points')),
-            game_points=float(match.group('game_points')),
-            rank=int_or_default(match.group('rank')),
-            player_ids=split_ints(match.group('player_ids'), 5),
-        )
-
-
-class AcceleratedRoundEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<match_points>[ \d.]{4}) (?P<game_points>[ \d.]{4}) '
-        r'(?P<first_round>[ \d]{3}) (?P<last_round>[ \d]{3}) '
-        r'(?P<first_id>[ \d]{4}) (?P<last_id>[ \d]{4})\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('250', 'accelerated_rounds')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        return 'MMMM GGGG RRF RRL PPPF PPPL'
-
-    def format(self, value: Any) -> str:
-        round_: AcceleratedRound = value
-        return (
-            f'{float_display(round_.match_points, 4)}'
-            f' {float_display(round_.game_points, 4)}'
-            f' {round_.first_round:>3}'
-            f' {round_.last_round or "":>3}'
-            f' {round_.first_id:>4}'
-            f' {round_.last_id:>4}'
-        )
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(f'Accelerated round data not matching pattern: {data}')
-        return AcceleratedRound(
-            match_points=float_or_default(match.group('match_points')),
-            game_points=float_or_default(match.group('game_points')),
-            first_round=int(match.group('first_round')),
-            last_round=int_or_default(match.group('last_round')),
-            first_id=int(match.group('first_id')),
-            last_id=int(match.group('last_id')),
-        )
-
-
-class ProhibitedPairingEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<first_round>[ \d]{3}) (?P<last_round>[ \d]{3})'
-        r'(?P<pairing_numbers>( [ \d]{4}){2,})\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('260', 'prohibited_pairings')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'RRF RRL'
-        num_columns = max(
-            len(pairing.pairing_numbers)
-            for pairing in tournament.prohibited_pairings
-        )
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "P")}'
-        return header
-
-    def format(self, value: Any) -> str:
-        pairing: ProhibitedPairing = value
-        line = f'{pairing.first_round:>3} {pairing.last_round or "":>3}'
-        for pairing_number in pairing.pairing_numbers:
-            line += f' {pairing_number:>4}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(
-                f'Prohibited pairings data not matching pattern: {data}'
-            )
-        return ProhibitedPairing(
-            first_round=int(match.group('first_round')),
-            last_round=int_or_default(match.group('last_round')),
-            pairing_numbers=split_ints(match.group('pairing_numbers'), 5),
-        )
-
-
-class RoundByeEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<type>[fhz]) (?P<round>[ \d]{3})'
-        r'(?P<pairing_numbers>( [ \d]{4})+)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('240', 'round_byes')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'T RRR'
-        num_columns = max(
-            len(bye.pairing_numbers) for bye in tournament.round_byes
-        )
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "P")}'
-        return header
-
-    def format(self, value: Any) -> str:
-        bye: RoundBye = value
-        line = f'{bye.type:1} {bye.round:>3}'
-        for pairing_number in bye.pairing_numbers:
-            line += f' {pairing_number:>4}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(
-                f'Round bye data not matching pattern: {data}'
-            )
-        return RoundBye(
-            type=match.group('type'),
-            round=int(match.group('round')),
-            pairing_numbers=split_ints(match.group('pairing_numbers'), 5),
-        )
-
-
-class TeamPABsEntry(SingleLineEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<match_points>[ \d.]{4}) (?P<game_points>[ \d.]{4})'
-        r'(?P<team_ids>( [ \d]{3})*)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('320', 'team_pabs')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header =  'MMMM GGGG'
-        assert tournament.team_pabs is not None
-        num_columns = len(tournament.round_dates)
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(3, "R")}'
-        return header
-
-    def format(self, value: Any) -> str:
-        team_pabs: TeamPABs = value
-        line = (
-            f'{float_display(team_pabs.match_points, 4)} '
-            f'{float_display(team_pabs.game_points, 4)}'
-        )
-        for round_ in range(1, max(team_pabs.team_id_by_round) + 1):
-            team_id = team_pabs.team_id_by_round.get(round_, None)
-            line += f' {team_id or "":>3}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(
-                f'Team PABs data not matching pattern: {data}'
-            )
-        teams_ids = split_optional_ints(match.group('team_ids'), 4)
-        team_id_by_round: dict[int, int] = {}
-        for round_, team_id in enumerate(teams_ids, start=1):
-            if team_id:
-                team_id_by_round[round_] = team_id
-        return TeamPABs(
-            match_points=float(match.group('match_points')),
-            game_points=float(match.group('game_points')),
-            team_id_by_round=team_id_by_round,
-        )
-
-
-class TeamForfeitedMatchEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<type>[-+]{2}) (?P<round>[ \d]{3}) '
-        r'(?P<white_team_id>[ \d]{3}) (?P<black_team_id>[ \d]{3})\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('330', 'team_forfeited_matches')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        return 'TT RRR WWW BBB'
-
-    def format(self, value: Any) -> str:
-        match: TeamForfeitedMatch = value
-        return (
-            f'{match.type:>2} {match.round:>3} '
-             f'{match.white_team_id:>3} {match.black_team_id:>3}'
-        )
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(
-                f'Team forfeited match data not matching pattern: {data}'
-            )
-        return TeamForfeitedMatch(
-            type=match.group('type'),
-            round=int(match.group('round')),
-            white_team_id=int(match.group('white_team_id')),
-            black_team_id=int(match.group('black_team_id')),
-        )
-
-class OOdOTeamPairingEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<round>[ \d]{3}) (?P<team_id>[ \d]{3}) '
-        r'(?P<opponent_team_id>[ \d]{3})(?P<boards>( [ \d]{4})*)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('300', 'oodo_team_pairings')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'RRR TT1 TT2'
-        num_columns = max(
-            len(pairing.boards) for pairing in tournament.oodo_team_pairings
-        )
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "P")}'
-        return header
-
-    def format(self, value: Any) -> str:
-        pairing: OOdOTeamPairing = value
-        line = f'{pairing.round:>3} {pairing.team_id:>3} {pairing.opponent_team_id:>3}'
-        for board in pairing.boards:
-            line += f' {board or "0000":>4}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(f'Out of order team boards data not matching pattern: {data}')
-        return OOdOTeamPairing(
-            round=int(match.group('round')),
-            team_id=int(match.group('team_id')),
-            opponent_team_id=int(match.group('opponent_team_id')),
-            boards=split_optional_ints(match.group('boards'), 5),
-        )
-
-
-class AbnormalPointsAssignmentEntry(MultipleLinesEntry):
-    LINE_PATTERN = re.compile(
-        r'^(?P<type>[dwlfhz+\- ]) (?P<match_points>[ \-\d.]{4}) '
-        r'(?P<game_points>[ \-\d.]{4})(?P<round>(\s[ \d]{3})?)(?P<pairing_numbers>( [ \d]{4})*)\s*$',
-        re.IGNORECASE,
-    )
-
-    def __init__(self):
-        super().__init__('299', 'abnormal_points_assignments')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        header = 'T MMMM GGGG RRR'
-        num_columns = max(
-            len(assignment.team_ids)
-            for assignment in tournament.abnormal_points_assignments
-        )
-        for column in range(1, num_columns + 1):
-            header += f' {str(column).rjust(4, "T")}'
-        return header
-
-    def format(self, value: Any) -> str:
-        assignment: AbnormalPointsAssignment = value
-        line = (
-            f'{assignment.type:1}'
-            f' {float_display(assignment.match_points, 4)}'
-            f' {float_display(assignment.game_points, 4)}'
-            f' {assignment.round or "000":3}'
-        )
-        for pairing_number in assignment.pairing_numbers:
-            line += f' {pairing_number or "0000":>4}'
-        return line
-
-    def parse(self, data: str) -> Any:
-        match = self.LINE_PATTERN.fullmatch(data)
-        if match is None:
-            raise TrfException(
-                f'Abnormal points assignment data not matching pattern: {data}'
-            )
-        return AbnormalPointsAssignment(
-            type=match.group('type'),
-            match_points=float_or_default(match.group('match_points')),
-            game_points=float_or_default(match.group('game_points')),
-            round=int_or_default(match.group('round')),
-            pairing_numbers=split_optional_ints(
-                match.group('pairing_numbers'), 5
-            ),
-        )
-
-class InformativeTeamPairingsEntry(MultipleLinesEntry):
-    """This entry (and 802) could be generated from other fields.
-    Until it is, it only is a string field so it can still be exported.
-    As it is informative, it does not require being read."""
-
-    def __init__(self):
-        super().__init__('801', 'informative_team_pairings_records')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        return 'Team pairings'
-
-
-class InformativeTeamResultsEntry(MultipleLinesEntry):
-    def __init__(self):
-        super().__init__('802', 'informative_team_results_records')
-
-    def get_header(self, tournament: Tournament) -> str | None:
-        return 'Team results'
+    def load(self, tournament, data):
+        name = data[:32].strip()
+        startranks = [int(s) for s in data[32:].strip().split() if s]
+        tournament.teams.append(Team(name, startranks))
 
 
 ENTRIES = [
     SingleLineEntry('012', 'name'),
     SingleLineEntry('022', 'city'),
     SingleLineEntry('032', 'federation'),
-    SingleLineEntry('042', 'start_date'),
-    SingleLineEntry('052', 'end_date'),
-    SingleLineIntEntry('062', 'num_players'),
-    SingleLineIntEntry('072', 'num_rated_players'),
-    SingleLineIntEntry('082', 'num_teams'),
+    SingleLineEntry('042', 'startdate'),
+    SingleLineEntry('052', 'enddate'),
+    SingleLineIntEntry('062', 'numplayers'),
+    SingleLineIntEntry('072', 'numratedplayers'),
+    SingleLineIntEntry('082', 'numteams'),
     SingleLineEntry('092', 'type'),
-    SingleLineEntry('102', 'chief_arbiter'),
-    MultipleLinesEntry('112', 'deputy_arbiters'),
-    SingleLineEntry('122', 'allotted_time'),
-    RoundDatesEntry(),
-    SingleLineIntEntry('142', 'num_rounds'),
-    SingleLineEntry('152', 'initial_color'),
-    PointSystemEntry('162', 'individuals_point_system'),
-    SingleLineEntry('172', 'starting_rank_method'),
-    SingleLineEntry('182', 'pairing_controller_id'),
-    SingleLineEntry('192', 'encoded_type'),
-    SingleLineListEntry('202', 'tie_breaks'),
-    SingleLineListEntry('212', 'standings_tie_breaks'),
-    SingleLineEntry('222', 'time_control'),
-    SingleLineEntry('352', 'board_color_sequence'),
-    PointSystemEntry('362', 'teams_point_system'),
-    PlayerEntry(),
+    SingleLineEntry('102', 'chiefarbiter'),
+    SingleLineEntry('112', 'deputyarbiters'),
+    SingleLineEntry('122', 'rateofplay'),
+    SingleLineListEntry('132', 'rounddates', delim=' '),
     TeamEntry(),
-    RoundByeEntry(),
-    AcceleratedRoundEntry(),
-    ProhibitedPairingEntry(),
-    TeamPABsEntry(),
-    TeamForfeitedMatchEntry(),
-    OOdOTeamPairingEntry(),
-    AbnormalPointsAssignmentEntry(),
-    InformativeTeamPairingsEntry(),
-    InformativeTeamResultsEntry(),
-
-    DeprecatedTeamEntry(),
+    PlayerEntry()
 ]

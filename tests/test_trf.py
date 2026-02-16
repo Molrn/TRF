@@ -9,28 +9,29 @@ RANDOM_TEST_NUMBER = 300
 RANDOM_PLAYERS_NUMBER = 123
 
 
-class TestTrf(TestCase):
+class TestTrt(TestCase):
     maxDiff = None
 
-    def test_load_example_trf16(self):
-        filename = os.path.join(os.path.dirname(__file__), 'example_trf16.trf')
+    def test_load_example1(self):
+        filename = os.path.join(os.path.dirname(__file__), 'example1.trf')
         with open(filename) as f:
             tour = trf.load(f)
 
         self.assertEqual(tour.name, '9. Karl-Mala-Gedenkturnier')
         self.assertEqual(tour.city, 'Frankfurt (Main) /GER')
         self.assertEqual(tour.federation, '')
-        self.assertEqual(tour.start_date, '28. 07. 2005')
-        self.assertEqual(tour.end_date, '31. 07. 2005')
-        self.assertEqual(tour.num_players, 284)
-        self.assertEqual(tour.num_rated_players, 146)
-        self.assertEqual(tour.num_teams, 0)
+        self.assertEqual(tour.startdate, '28. 07. 2005')
+        self.assertEqual(tour.enddate, '31. 07. 2005')
+        self.assertEqual(tour.numplayers, 284)
+        self.assertEqual(tour.numratedplayers, 146)
+        self.assertEqual(tour.numteams, 0)
         self.assertEqual(tour.type, 'Individual: Swiss-System (Standard)')
-        self.assertEqual(tour.chief_arbiter, 'Ralph Blum (SV Griesheim)')
-        self.assertEqual(tour.deputy_arbiters, ['NSR Thomas Rondio, NSR Wolfgang Hettler'])
-        self.assertEqual(tour.allotted_time, '40/120, 60')
-        self.assertEqual(tour.round_dates, [])
-        self.assertEqual(tour.num_rounds_estimation, 7)
+        self.assertEqual(tour.chiefarbiter, 'Ralph Blum (SV Griesheim)')
+        self.assertEqual(tour.deputyarbiters,
+                         'NSR Thomas Rondio, NSR Wolfgang Hettler')
+        self.assertEqual(tour.rateofplay, '40/120, 60')
+        self.assertEqual(tour.rounddates, [])
+        self.assertEqual(tour.numrounds, 7)
 
         for p in tour.players:
             self.assertIsInstance(p, trf.Player)
@@ -39,150 +40,18 @@ class TestTrf(TestCase):
                 self.assertIsInstance(g, trf.Game)
 
         self.assertEqual(tour.players[25].name, 'Schaffer,Hendrik')
-        self.assertEqual(tour.players[144].fide_id, 24615480)
+        self.assertEqual(tour.players[144].id, 24615480)
         self.assertEqual(tour.players[114].rating, 1994)
-        self.assertEqual(tour.players[81].birth_date, '1965.09.07')
+        self.assertEqual(tour.players[81].birthdate, '1965.09.07')
         self.assertEqual(tour.players[74].games[4], trf.Game(188, 'w', '1', 5))
-
-    def test_load_example_trf26(self):
-        filename = os.path.join(os.path.dirname(__file__), 'example_trf26.trf')
-        with open(filename) as f:
-            tour = trf.load(f)
-
-        self.assertEqual(tour.name, 'Grandmommy\'s Cup')
-        self.assertEqual(tour.city, 'Test')
-        self.assertEqual(tour.federation, 'FID')
-        self.assertEqual(tour.start_date, '2024/01/01')
-        self.assertEqual(tour.end_date, '2024/01/14')
-        self.assertEqual(tour.num_players, 249)
-        self.assertEqual(tour.num_rated_players, 249)
-        self.assertEqual(tour.num_teams, 50)
-        self.assertEqual(tour.type, 'FIDE-TEAM-BAKU')
-        self.assertEqual(tour.chief_arbiter, 'The Chief Arbiter')
-        self.assertEqual(tour.deputy_arbiters[0], 'The first Deputy Chief Arbiter')
-        self.assertEqual(tour.allotted_time, "100'x40+15'+30\"")
-        self.assertEqual(len(tour.round_dates), 14)
-        self.assertEqual(tour.round_dates[3], '24/01/04')
-        self.assertEqual(tour.num_rounds, 14)
-        self.assertEqual(tour.encoded_type, 'FIDE_TEAM_BAKU')
-        self.assertEqual(len(tour.tie_breaks), 4)
-        self.assertEqual(tour.tie_breaks[2], 'BH:MP/C1/P')
-        self.assertEqual(tour.time_control, '40/6000+30:900+30')
-        self.assertEqual(tour.num_rounds, 14)
-        self.assertEqual(tour.board_color_sequence, 'WBWB')
-        self.assertEqual(tour.teams_point_system, {'TW': 2.0, 'TD': 1.0, 'TL': 0.0})
-
-        self.assertEqual(len(tour.players), 249)
-        for p in tour.players:
-            self.assertIsInstance(p, trf.Player)
-            for g in p.games:
-                self.assertIsInstance(g, trf.Game)
-
-        self.assertEqual(tour.players[144].name, 'Test0145 Player0145')
-        self.assertEqual(tour.players[25].fide_id, 72623454321)
-        self.assertEqual(tour.players[74].rating, 2321)
-        self.assertEqual(tour.players[114].birth_date, '1993/00/00')
-        self.assertEqual(tour.players[81].games[6], trf.Game(56, 'b', '1', 7))
-
-        self.assertEqual(len(tour.teams), 50)
-        self.assertEqual(tour.teams[45].name, 'Uzbekistan')
-        self.assertEqual(tour.teams[22].nickname, 'CZE')
-        self.assertEqual(tour.teams[12].strength_factor, 2327)
-        self.assertEqual(tour.teams[25].match_points, 9.0)
-        self.assertEqual(tour.teams[32].game_points, 19.5)
-        self.assertEqual(tour.teams[5].rank, 6)
-        self.assertEqual(tour.teams[7].player_ids, [8, 75, 54, 66, 64])
-
-        self.assertEqual(len(tour.accelerated_rounds), 4)
-        self.assertEqual(
-            tour.accelerated_rounds[1],
-            trf.AcceleratedRound(
-                match_points=2.0,
-                game_points=None,
-                first_round=1,
-                last_round=None,
-                first_id=4,
-                last_id=25,
-            ),
-        )
-        self.assertEqual(len(tour.round_byes), 18)
-        self.assertEqual(
-            tour.round_byes[10],
-            trf.RoundBye(type='F', round=6, pairing_numbers=[16]),
-        )
-        self.assertEqual(len(tour.prohibited_pairings), 1)
-        self.assertEqual(
-            tour.prohibited_pairings[0],
-            trf.ProhibitedPairing(
-                first_round=1, last_round=14, pairing_numbers=[1, 11, 16]
-            ),
-        )
-        self.assertEqual(
-            tour.team_pabs,
-            trf.TeamPABs(
-                match_points=1.0,
-                game_points=2.0,
-                team_id_by_round={3: 50, 4: 49, 6: 46, 7: 48, 8: 45, 10: 36, 11: 43, 14: 40},
-            )
-        )
-        self.assertEqual(len(tour.team_forfeited_matches), 22)
-        self.assertEqual(
-            tour.team_forfeited_matches[5],
-            trf.TeamForfeitedMatch(
-                type='-+',
-                round=8,
-                white_team_id=27,
-                black_team_id=14,
-            )
-        )
-        self.assertEqual(len(tour.abnormal_points_assignments), 2)
-        self.assertEqual(
-            tour.abnormal_points_assignments[0],
-            trf.AbnormalPointsAssignment(
-                type='+',
-                match_points=2.0,
-                game_points=2.5,
-                round=1,
-                pairing_numbers=[1],
-            ),
-        )
-        self.assertEqual(len(tour.oodo_team_pairings), 141)
-        self.assertEqual(
-            tour.oodo_team_pairings[9],
-            trf.OOdOTeamPairing(
-                round=2,
-                team_id=14,
-                opponent_team_id=2,
-                boards=[51, 60, 120, None],
-            )
-        )
-        self.assertEqual(len(tour.informative_team_pairings_records), 50)
-        self.assertEqual(
-            tour.informative_team_pairings_records[21],
-            '22 SVK   20 32.0  10 w ==== 1234  12 b 1101 1254  '
-            '13 w 1100 1234   8 b 00=1 1235  37 w 110= 1234  11 b 1==0 1234   '
-            '9 w 11=0 1234   7 w 10=1 1234   4 b 1=== 1534       FFFF       '
-            '19 b 11=0 1254  18 w 00=0 1234   6 b 11=0 1234   3 w 1010 1234',
-        )
-        self.assertEqual(len(tour.informative_team_results_records), 50)
-        self.assertEqual(
-            tour.informative_team_results_records[15],
-            '16 IND3    20   33.5    4 w  2.5     3 b  1.5     '
-            '1 w  2.0    12 w  2.5     2 b  2.5   FPB    4.0    19 b  3.0     '
-            '6 w  2.0    18 w  1.5    11 b  1.5     8 b  2.5     5 w  2.5     '
-            '9 w  3.0    13 b  2.5',
-        )
 
     @repeat(RANDOM_TEST_NUMBER)
     def test_random_chinese_whispers(self):
         tour = rt.tournament(RANDOM_PLAYERS_NUMBER)
         self.chinese_whispers(tour)
 
-    def test_example_trf16_chinese_whispers(self):
-        self.chinese_whispers_from_file('example_trf16')
-
-    def test_example_trf26_chinese_whispers(self):
-        self.chinese_whispers_from_file('example_trf26')
+    def test_example1_chinese_whispers(self):
+        self.chinese_whispers_from_file('example1')
 
     def test_2020_06_chinese_whispers(self):
         self.chinese_whispers_from_file('2020_06')
@@ -213,34 +82,34 @@ class TestTrf(TestCase):
                              'Diff of {tournament.city}' + itertext)
             self.assertEqual(tour.federation, tour0.federation,
                              'Diff of {tournament.federation}' + itertext)
-            self.assertEqual(tour.start_date, tour0.start_date,
-                             'Diff of {tournament.start_date}' + itertext)
-            self.assertEqual(tour.end_date, tour0.end_date,
-                             'Diff of {tournament.end_date}' + itertext)
-            self.assertEqual(tour.num_players, tour0.num_players,
-                             'Diff of {tournament.num_players}' + itertext)
-            self.assertEqual(tour.num_rated_players, tour0.num_rated_players,
-                             'Diff of {tournament.num_rated_players}' + itertext)
-            self.assertEqual(tour.num_teams, tour0.num_teams,
-                             'Diff of {tournament.num_teams}' + itertext)
+            self.assertEqual(tour.startdate, tour0.startdate,
+                             'Diff of {tournament.startdate}' + itertext)
+            self.assertEqual(tour.enddate, tour0.enddate,
+                             'Diff of {tournament.enddate}' + itertext)
+            self.assertEqual(tour.numplayers, tour0.numplayers,
+                             'Diff of {tournament.numplayers}' + itertext)
+            self.assertEqual(tour.numratedplayers, tour0.numratedplayers,
+                             'Diff of {tournament.numratedplayers}' + itertext)
+            self.assertEqual(tour.numteams, tour0.numteams,
+                             'Diff of {tournament.numteams}' + itertext)
             self.assertEqual(tour.type, tour0.type,
                              'Diff of {tournament.type}' + itertext)
-            self.assertEqual(tour.chief_arbiter, tour0.chief_arbiter,
-                             'Diff of {tournament.chief_arbiter}' + itertext)
-            self.assertEqual(tour.deputy_arbiters, tour0.deputy_arbiters,
-                             'Diff of {tournament.deputy_arbiters}' + itertext)
-            self.assertEqual(tour.allotted_time, tour0.allotted_time,
-                             'Diff of {tournament.allotted_time}' + itertext)
-            self.assertEqual(tour.round_dates, tour0.round_dates,
-                             'Diff of {tournament.round_dates}' + itertext)
+            self.assertEqual(tour.chiefarbiter, tour0.chiefarbiter,
+                             'Diff of {tournament.chiefarbiter}' + itertext)
+            self.assertEqual(tour.deputyarbiters, tour0.deputyarbiters,
+                             'Diff of {tournament.deputyarbiters}' + itertext)
+            self.assertEqual(tour.rateofplay, tour0.rateofplay,
+                             'Diff of {tournament.rateofplay}' + itertext)
+            self.assertEqual(tour.rounddates, tour0.rounddates,
+                             'Diff of {tournament.rounddates}' + itertext)
             self.assertEqual(tour.xx_fields, tour0.xx_fields,
                              'Diff of {tournament.xx_fields}' + itertext)
 
             self.assertEqual(len(tour.players), len(tour0.players))
             for j, (player, player0) in enumerate(zip(tour.players, tour0.players)):
                 self.assertIsInstance(player, trf.Player)
-                self.assertEqual(player.id, player0.id,
-                                 f'Diff of {{player[{j}].id}}' + itertext)
+                self.assertEqual(player.startrank, player0.startrank,
+                                 f'Diff of {{player[{j}].startrank}}' + itertext)
                 self.assertEqual(player.sex, player0.sex,
                                  f'Diff of {{player[{j}].sex}}' + itertext)
                 self.assertEqual(player.title, player0.title,
@@ -249,12 +118,12 @@ class TestTrf(TestCase):
                                  f'Diff of {{player[{j}].name}}' + itertext)
                 self.assertEqual(player.rating, player0.rating,
                                  f'Diff of {{player[{j}].rating}}' + itertext)
-                self.assertEqual(player.federation, player0.federation,
-                                 f'Diff of {{player[{j}].federation}}' + itertext)
+                self.assertEqual(player.fed, player0.fed,
+                                 f'Diff of {{player[{j}].fed}}' + itertext)
                 self.assertEqual(player.id, player0.id,
                                  f'Diff of {{player[{j}].id}}' + itertext)
-                self.assertEqual(player.birth_date, player0.birth_date,
-                                 f'Diff of {{player[{j}].birth_date}}' + itertext)
+                self.assertEqual(player.birthdate, player0.birthdate,
+                                 f'Diff of {{player[{j}].birthdate}}' + itertext)
                 self.assertEqual(player.points, player0.points,
                                  f'Diff of {{player[{j}].points}}' + itertext)
                 self.assertEqual(player.rank, player0.rank,
