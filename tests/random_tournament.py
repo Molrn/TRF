@@ -1,4 +1,4 @@
-from trf import Game, Player, Tournament, Team
+from trf import Game, Player, Tournament, DeprecatedTeam
 import random
 import string
 
@@ -28,7 +28,7 @@ def game(players: int) -> Game:
     sr = random.randint(0, players)
     cl = random.choice('wb-')
     re = random.choice('-+WDL1=0HFUZwdlhfuz')
-    return Game(startrank=sr, color=cl, result=re, round=None)
+    return Game(opponent_id=sr, color=cl, result=re, round=0)
 
 
 def games(players: int):
@@ -47,18 +47,18 @@ def player(players) -> Player:
                           'WI', 'CM', 'WF', 'WC'])
     rating = random.randint(0, 3000)
     fed = latin(MAX_FED_SIZE)
-    id = random.randint(0, MAX_ID)
+    fide_id = random.randint(0, MAX_ID)
     bd = date()
     pts = points(players)
     rank = random.randint(0, players)
     gs = games(players)
-    return Player(startrank=sr, name=name, sex=sex,
+    return Player(id=sr, name=name, sex=sex,
                   title=title, rating=rating,
-                  fed=fed, id=id, birthdate=bd,
+                  federation=fed, fide_id=fide_id, birth_date=bd,
                   points=pts, rank=rank, games=gs)
 
 
-def rounddates(players: int):
+def round_dates(players: int):
     size = random.randint(0, players)
     return [date() for _ in range(size)]
 
@@ -67,12 +67,6 @@ def xx_fields():
     size = random.randint(0, MAX_XX_FIELDS_SIZE)
     return {'XX'+latin(1, space=False): latin(MAX_NAME_SIZE)
             for _ in range(size)}
-
-
-def team(players):
-    members = random.randint(0, players)
-    sr = [random.randint(0, players) for _ in range(members)]
-    return Team(latin(32), sr)
 
 
 def tournament(players) -> Tournament:
@@ -88,12 +82,11 @@ def tournament(players) -> Tournament:
     ca = latin(MAX_NAME_SIZE)
     dca = latin(MAX_NAME_SIZE)
     rop = latin(MAX_NAME_SIZE)
-    rd = rounddates(players)
+    rd = round_dates(players)
     ps = [player(players) for _ in range(players)]
-    ts = [team(players) for _ in range(nt)]
     xx = xx_fields()
-    return Tournament(name=name, city=city, federation=fed, startdate=sd,
-                      enddate=ed, numplayers=np, numratedplayers=nrp,
-                      numteams=nt, type=type, chiefarbiter=ca,
-                      deputyarbiters=dca, rateofplay=rop, rounddates=rd,
-                      players=ps, teams=ts, xx_fields=xx)
+    return Tournament(name=name, city=city, federation=fed, start_date=sd,
+                      end_date=ed, num_players=np, num_rated_players=nrp,
+                      num_teams=nt, type=type, chief_arbiter=ca,
+                      deputy_arbiters=[dca], allotted_time=rop, round_dates=rd,
+                      players=ps, xx_fields=xx)
