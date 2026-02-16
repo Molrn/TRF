@@ -1,6 +1,6 @@
 import trf
 
-with open('example1.trf') as f:
+with open('example_trf16.trf') as f:
     tour = trf.load(f)
 
 print(tour.name)
